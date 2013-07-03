@@ -1,0 +1,280 @@
+/*
+Based on Firmata and Arduino library for Processing:
+ http://www.arduino.cc/playground/Interfacing/Processing
+ Sketch initiately based on the arduino_output.pde sketch
+ 
+ Twitter Janus communication control sketch.
+ Andrew Lewis
+ Feel free to reuse
+ This Processing sketch is the command code that will eventually remote control a talking head over the Internet
+ Version 2 [24/6/2012] - 
+ 0. Open serial connection to arduino board
+ 1. enable processing sketch to be used to turn on LEDs
+ 2. [new] Check for tweets using Twitter API]
+ 3. [new] Indicate twitter processing happening using LEDs
+ 4. [new] Import ttslib library 
+ 5. [new 13/7/2012] Testing 'loop()' function to auto-detect tweets instead of manually with keyboard 
+ 6. [new 13/7/2012] Trying to get analogRead() to work from Arduino Firmata to power mouth from speech using voltage of audio signal peaks as triggers for a jaw actuator
+ 8. [new 21/7/2012] Trying analogue read inside TTS
+ 
+ */
+
+/*
+ valueAnalogIn = arduino.analogRead(analogInput); // This is checking for output above a threshold voltage to trigger jaw signal
+ println ("AnalogInput value = "+valueAnalogIn);
+ if (valueAnalogIn>thresholdAnalogIn)
+ {
+ arduino.digitalWrite(peakPin, Arduino.HIGH);
+ }
+ else {
+ arduino.digitalWrite(peakPin, Arduino.LOW);
+ }// @@ end threshold checking //
+ 
+ */
+
+// import libraries 
+import processing.serial.*;
+import cc.arduino.*; // NB this needs to be loaded manually on your computer (available at http://www.arduino.cc/playground/Interfacing/Processing)
+import guru.ttslib.*; // NB this also needs to be loaded (available from http://www.local-guru.net/projects/ttslib/ttslib-0.3.zip)
+
+TTS speeker;
+Arduino arduino;
+
+// this is setting up fill colours for Processing display
+color off = color(4, 79, 111);
+color on = color(84, 145, 158);
+
+// initialise variables
+int value=10;
+int thresholdAnalogIn=10;
+int peakPin = 2;
+int valueAnalogIn =0;
+int analogInput = 0;
+int count=0;
+int countStop=40;
+int movex=0;
+float f = random(260000);
+int currentM = millis(); // used to store sets current time since app launched in milliseconds
+int timer = 0; // a timer variable to compare it with to see if a fixed period is over
+int period =29000; // this is the interval between checks made for new tweets
+int bk =int(f);
+int spacer=35;
+int rectHeight=0;
+String tweetText = "initialised";
+String tweetCheck = tweetText;
+String twitterUsername = "twitr_janus";
+int getPIN = 8;// this is the pin number for the LED that is indicating if a tweet has been received 
+int newTweetPIN = 2;
+int delayVal=500;
+
+// initialise PIN values
+int[] values = { 
+  Arduino.LOW, Arduino.LOW, Arduino.LOW, Arduino.LOW, 
+  Arduino.LOW, Arduino.LOW, Arduino.LOW, Arduino.LOW, Arduino.LOW, 
+  Arduino.LOW, Arduino.LOW, Arduino.LOW, Arduino.LOW, Arduino.LOW
+};
+
+void setup() {
+  testSendTweet();
+  // draw the Proessing display window
+  size(470, 200);
+  speeker = new TTS();
+  // display communication ports (use this in test to establish fee ports)
+  // initialise the tweetText variable with last tweet from specified username
+
+  println(Arduino.list());
+  // make serial connection (this is using COM5 Arduino.list()[1], BUT varies depending on what your computer has connected to its ports 
+  arduino = new Arduino(this, Arduino.list()[2], 57600);
+  // initialise PINs 
+  for (int i = 0; i <= 13; i++)
+    arduino.pinMode(i, Arduino.OUTPUT);
+  getTweet();
+  drawBox();
+}
+void drawBox() {
+  background(off);
+  stroke(on);
+
+  for (int i = 0; i <= 13; i++) {
+    if (values[i] == Arduino.HIGH)
+      fill(on);
+    else
+      fill(off);
+
+    rect(420- i * 30, 30, 20, 20);
+  }
+  int intx=0;
+  int inty=120;
+
+
+  if (count>countStop) {
+    count=0;
+    movex=0;
+    f = random(20000);
+    bk =int(f);
+  } 
+  else {
+    if (rectHeight>120)
+    {
+      rectHeight=0;
+    } 
+    else
+    {
+      rectHeight+=1;
+    };
+    count++;
+    movex+= spacer;
+  };
+
+  //background(bk); 
+  color c1 = color(3, 88, 170);
+  fill(c1);
+  noStroke();
+  rect(intx+movex, inty, 55, 55 );
+}
+
+void draw() {
+  drawBox();
+  currentM= millis();
+
+  if (currentM-timer > period) { //this is checking tweet based upon a time interval"period"
+    getTweet();
+    timer=currentM;
+    println ("Timer = "+currentM);
+  } //@@ end  period @@
+}
+
+
+void testSendTweet()
+{
+  ConfigurationBuilder cbTEST = new ConfigurationBuilder();
+  // ------- NB - the variables twitOAuthConsumerKey, etc. need to be in a 
+  // seperate 
+  cbTEST.setOAuthConsumerKey(twitOAuthConsumerKey);
+  cbTEST.setOAuthConsumerSecret(twitOAuthConsumerSecret);
+  cbTEST.setOAuthAccessToken(twitOAuthAccessToken);
+  cbTEST.setOAuthAccessTokenSecret(twitOAuthAccessTokenSecret);
+
+  Twitter twitterTEST = new TwitterFactory(cbTEST.build()).getInstance();
+  String TESTTEXT="@rosemarybeetle - TestTweet from Twitr_janus"+random(199999);
+  try { // TRY ALLOWS ERROR HANDLING FOR EXCEPTIONS...
+    Query query = new Query("#twitterjanus"); // this is default you check the first of 4 admin settings, but should be extended to include passing a selctor param
+    query.count(2); // count is the number of tweets returned per page
+
+    QueryResult result = twitterTEST.search(query); // gets the query
+    print ("result="+result);
+    int ll=1; // @@ DEBUG STUFF
+    for (Status status : result.getTweets()) { // EXTRACT THE TWEETS
+      String user = status.getUser().getScreenName();// GET THE TWITTER USERNAME
+      String msg = status.getText(); // EXTRACT THE TWEET TEXT
+        println ("tweet #"+ll+"from : "+user+". Text = "+msg); // @@ DEBUG STUFF
+     tweetText=("Tweet received. From. "+user+". It says."+msg);
+     println();
+     println();
+     println("tweetText= "+tweetText);
+     speeker.speak(tweetText);
+        println ("-----------");
+        ll++; // @@ DEBUG STUFF (INCREMENT)
+    
+     //@@
+     }
+     
+  
+  }
+  catch(TwitterException e) { 
+    println("Send tweet: " + e + " Status code: " + e.getStatusCode());
+  } // end */
+  try {
+    Status status = twitterTEST.updateStatus(TESTTEXT);
+    println("Successfully tweeted the message: ");// @@ DEBUG STUFF
+    //delayCheck=millis();
+  } 
+  catch(TwitterException e) { 
+    println("Send tweet: " + e + " Status code: " + e.getStatusCode());
+  } // end */
+}
+void getTweet ()
+{
+  // uses Twitter API to get public tweets from username (sent in function argument)
+  arduino.digitalWrite(getPIN, Arduino.HIGH);
+  values[getPIN] = Arduino.HIGH;
+
+  tweetCheck = tweetText;
+  /*
+  String twitterApiString = "https://api.twitter.com/1/statuses/user_timeline.json?include_entities=true&include_rts=true&screen_name="+twitterUsername+"&count=0";
+   println ("@@@");
+   println ("[Start Inside printTweet]");
+   println ();
+   String [] texty = loadStrings(twitterApiString);
+   String [] texty2 = split (texty[0], ':');
+   String [] texty3 = split (texty2[6], '"');
+   tweetText = texty3[1];
+   println ("tweetText is loaded with the last tweet from Rosemarybeetle was: ");
+   //println (currentTweet);
+   println (tweetText);
+   println ();
+   println ("and...");
+   println ();
+   print ("tweetCheck value = ");
+   println (tweetCheck);
+   println ();
+   println ("[End Inside printTweet]");
+   println ("@@@");
+   println ();
+   */
+  arduino.digitalWrite(getPIN, Arduino.LOW);
+  values[getPIN] = Arduino.LOW;
+  if (tweetText.equals(tweetCheck)==false)
+  {
+    println ("inside tweet checking IF");
+    print (tweetText);
+    println ("@");
+    print (tweetCheck);
+    println ("@");
+    arduino.digitalWrite(newTweetPIN, Arduino.HIGH);
+    values[newTweetPIN] = Arduino.HIGH;
+    delay (delayVal);
+    arduino.digitalWrite(newTweetPIN, Arduino.LOW);
+    values[newTweetPIN] = Arduino.LOW;
+    //speeker.speak(tweetText);
+  };
+}
+
+//@@@@@@@@@@@@@@@@@@ imported from twitter4J test
+/*void sendTweet(String tweetText) {
+ 
+ ConfigurationBuilder cb2 = new ConfigurationBuilder();
+ // ------- NB - the variables twitOAuthConsumerKey, etc. need to be in a 
+ // seperate 
+ cb2.setOAuthConsumerKey(twitOAuthConsumerKey);
+ cb2.setOAuthConsumerSecret(twitOAuthConsumerSecret);
+ cb2.setOAuthAccessToken(twitOAuthAccessToken);
+ cb2.setOAuthAccessTokenSecret(twitOAuthAccessTokenSecret);
+ 
+ Twitter twitter2 = new TwitterFactory(cb2.build()).getInstance();
+ 
+ try {
+ Status status = twitter2.updateStatus(tweetText);
+ println("Successfully updated the status to [" + status.getText() + "].");
+ } finally {}
+ catch(TwitterException e) { 
+ println("Send tweet: " + e + " Status code: " + e.getStatusCode());
+ } // end try
+ }*/
+
+void grabTweets() {
+  //Credentials
+  ConfigurationBuilder cb = new ConfigurationBuilder();
+  cb.setOAuthConsumerKey(twitOAuthConsumerKey);
+  cb.setOAuthConsumerSecret(twitOAuthConsumerSecret);
+  cb.setOAuthAccessToken(twitOAuthAccessToken);
+  cb.setOAuthAccessTokenSecret(twitOAuthAccessTokenSecret);
+
+  //Make the twitter object and prepare the query
+  Twitter twitter = new TwitterFactory(cb.build()).getInstance();
+  Query query = new Query("@museumnext");
+  query.count(100);
+  // The factory instance is re-useable and thread safe.
+
+  //Try making the query request.
+}
