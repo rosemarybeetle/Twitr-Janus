@@ -39,6 +39,7 @@ import guru.ttslib.*; // NB this also needs to be loaded (available from http://
 
 TTS tts;
 Arduino arduino;
+Serial port;
 
 // this is setting up fill colours for Processing display
 color off = color(4, 79, 111);
@@ -61,12 +62,17 @@ int bk =int(f);
 int spacer=35;
 int rectHeight=0;
 String tweetText = "initialised";
-String tweetCheck = tweetText;
+String queryString="lol";
+String queryType="hashtag";
+String tweetCheck = "hhhh";
 String twitterUsername = "twitr_janus";
 int getPIN = 8;// this is the pin number for the LED that is indicating if a tweet has been received 
 int newTweetPIN = 2;
 int delayVal=500;
 
+String adminSettings [] = {
+  "#laugh", "@rosemarybeetle", "weird", "100", "50000", "h",  "secure", "Greetings Master. This is twitter-janus. speaking", "this is test text", "centre", "centre", "code"
+};
 // initialise PIN values
 int[] values = { 
   Arduino.LOW, Arduino.LOW, Arduino.LOW, Arduino.LOW, 
@@ -75,20 +81,30 @@ int[] values = {
 };
 
 void setup() {
-  //testSendTweet();
+  
   // draw the Proessing display window
   size(470, 200);
   tts = new TTS();
+  grabTweets() ;
+  
   // display communication ports (use this in test to establish fee ports)
   // initialise the tweetText variable with last tweet from specified username
-
+try {
+    loadRemoteAdminSettings(); // loads Twitter search parameters from remote Google spreadsheet
+    println ("adminSettings 2 "+adminSettings);
+    tts.speak("I am connected to the web. Master.Admin. settings have been loaded into my brain"); // @@ DEBUG STUFF - SPOKEN OUT. ONLY WORKS IF CONNECTION WORKS
+  }  
+  catch (Exception e) {
+    println("failed to load remoters");
+    tts.speak("I am sorry. I am not able to connect to the web. Admin. settings have not been loaded into my brain master"); // @@ DEBUG STUFF
+  }
   println(Arduino.list());
   // make serial connection (this is using COM5 Arduino.list()[1], BUT varies depending on what your computer has connected to its ports 
   arduino = new Arduino(this, Arduino.list()[2], 57600);
   // initialise PINs 
   for (int i = 0; i <= 13; i++)
     arduino.pinMode(i, Arduino.OUTPUT);
-  getTweet();
+  grabTweets() ;
   drawBox();
 }
 void drawBox() {
@@ -138,17 +154,15 @@ void draw() {
   currentM= millis();
 
   if (currentM-timer > period) { //this is checking tweet based upon a time interval"period"
-    getTweet();
-    testSendTweet();
     timer=currentM;
     println ("Timer = "+currentM);
+    getTweets();
+    
   } //@@ end  period @@
 }
 
-void mousePressed() {
-  tts.speak("Hi! I am a speaking Processing sketch");
-}
-void testSendTweet()
+
+void getTweets()
 {
   ConfigurationBuilder cbTEST = new ConfigurationBuilder();
   // ------- NB - the variables twitOAuthConsumerKey, etc. need to be in a 
@@ -161,8 +175,27 @@ void testSendTweet()
   Twitter twitterTEST = new TwitterFactory(cbTEST.build()).getInstance();
   String TESTTEXT="@rosemarybeetle - TestTweet from Twitr_janus"+random(199999);
   try { // TRY ALLOWS ERROR HANDLING FOR EXCEPTIONS...
-    Query query = new Query("#twitterjanus"); // this is default you check the first of 4 admin settings, but should be extended to include passing a selctor param
-    query.count(2); // count is the number of tweets returned per page
+    
+    //try { // TRY ALLOWS ERROR HANDLING FOR EXCEPTIONS...
+    if (adminSettings[5].equals("s"))
+    {
+      queryString=adminSettings[2];
+      queryType="keyword";
+    } 
+    if (adminSettings[5].equals("h"))
+    {
+      queryString=adminSettings[0];
+      queryType="hastag";
+    }
+    if (adminSettings[5].equals("u"))
+    {
+      queryString=adminSettings[1];
+      queryType="twitter username";
+    }
+       
+    Query query = new Query(queryString); // this is default you check the first of 4 admin settings, but should be extended to include passing a selctor param
+    query.count(int(adminSettings[3]));
+    //query.count(2); // count is the number of tweets returned per page
 
     QueryResult result = twitterTEST.search(query); // gets the query
     print ("result="+result);
@@ -171,7 +204,7 @@ void testSendTweet()
       String user = status.getUser().getScreenName();// GET THE TWITTER USERNAME
       String msg = status.getText(); // EXTRACT THE TWEET TEXT
         println ("tweet #"+ll+"from : "+user+". Text = "+msg); // @@ DEBUG STUFF
-     tweetText=("Tweet received. From. "+user+". It says."+msg);
+     tweetText=("Tweet received. I am searching by. "+queryType+". This tweet is from. "+user+". It says."+msg);
      println();
      println();
      println("tweetText= "+tweetText);
@@ -184,25 +217,21 @@ void testSendTweet()
     
      //@@
      }
-     tts.speak(tweetText);
+     speakLastTweet ();
      
   
   }
   catch(TwitterException e) { 
     println("Send tweet: " + e + " Status code: " + e.getStatusCode());
   } // end */
-  try {
+  /*try {
     Status status = twitterTEST.updateStatus(TESTTEXT);
     println("Successfully tweeted the message: ");// @@ DEBUG STUFF
     //delayCheck=millis();
   } 
   catch(TwitterException e) { 
     println("Send tweet: " + e + " Status code: " + e.getStatusCode());
-  } // end */
-}
-void getTweet ()
-{
-  // uses Twitter API to get public tweets from username (sent in function argument)
+  }  */
   arduino.digitalWrite(getPIN, Arduino.HIGH);
   values[getPIN] = Arduino.HIGH;
 
@@ -229,8 +258,8 @@ void getTweet ()
    println ("@@@");
    println ();
    */
-  arduino.digitalWrite(getPIN, Arduino.LOW);
-  values[getPIN] = Arduino.LOW;
+  //arduino.digitalWrite(getPIN, Arduino.LOW);
+  //values[getPIN] = Arduino.LOW;
   if (tweetText.equals(tweetCheck)==false)
   {
     println ("inside tweet checking IF");
@@ -247,27 +276,6 @@ void getTweet ()
   };
 }
 
-//@@@@@@@@@@@@@@@@@@ imported from twitter4J test
-/*void sendTweet(String tweetText) {
- 
- ConfigurationBuilder cb2 = new ConfigurationBuilder();
- // ------- NB - the variables twitOAuthConsumerKey, etc. need to be in a 
- // seperate 
- cb2.setOAuthConsumerKey(twitOAuthConsumerKey);
- cb2.setOAuthConsumerSecret(twitOAuthConsumerSecret);
- cb2.setOAuthAccessToken(twitOAuthAccessToken);
- cb2.setOAuthAccessTokenSecret(twitOAuthAccessTokenSecret);
- 
- Twitter twitter2 = new TwitterFactory(cb2.build()).getInstance();
- 
- try {
- Status status = twitter2.updateStatus(tweetText);
- println("Successfully updated the status to [" + status.getText() + "].");
- } finally {}
- catch(TwitterException e) { 
- println("Send tweet: " + e + " Status code: " + e.getStatusCode());
- } // end try
- }*/
 
 void grabTweets() {
   //Credentials
@@ -284,4 +292,70 @@ void grabTweets() {
   // The factory instance is re-useable and thread safe.
 
   //Try making the query request.
+}
+
+void loadRemoteAdminSettings ()
+{
+  try {
+    String checkRandomSpeech = adminSettings[8];
+    adminSettings = loadStrings("https://docs.google.com/spreadsheet/pub?key=0AgTXh43j7oFVdDlZWVZDdW56Yl83U0JYanNrcm16R1E&output=txt");
+    if ((checkRandomSpeech.equals(adminSettings[8]))!=true) {
+      tts.speak(adminSettings[8]);
+      
+    for (int i = 0 ; i < adminSettings.length; i++) {
+      println("adminSettings["+i+"]= "+adminSettings[i]);
+    } // end for
+  }
+  }
+  catch (Exception e) {
+    println ("no CONNECTION");
+  }
+}
+
+void speakLastTweet ()
+{
+  
+  try {
+    loadRemoteAdminSettings ();
+  if (tweetText.equals(tweetCheck)==false)
+  {
+    //noLoop(); /// pause the polling
+  println ("inside speakLastTweet ()");
+    println(tweetText);
+    println ();
+    println ("----------------");
+    tts.speak(tweetText);
+    println ("----------------");
+    port.write(30);
+    
+    
+  
+    //loop();  // restart the polling
+//tweetCheck = tweetText;
+  
+}// end null detection
+  } catch (Exception e) {
+  }//end try
+} /// end get Tweet
+
+void keyPressed() {
+  // @@@@@@@@@@@@@@@@
+  // these lines will be superceded by data from the Internet
+  
+    if (keyCode==' ' ) {
+    tts.speak("space pressed. Search type = "+adminSettings[5]);
+    
+  if (adminSettings[5].equals("h"))
+  {
+   tts.speak("Hello master. My brain is tuned to a hashtag. search"); 
+  } else if  (adminSettings[5].equals("u"))
+  {
+    tts.speak("Hello master. My brain is tuned to a username. search"); 
+
+  }else if  (adminSettings[5].equals("s"))
+  {
+    tts.speak("Hello master. My brain is tuned to a general keyword. search"); 
+
+  }
+  }
 }
