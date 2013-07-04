@@ -37,7 +37,7 @@ import processing.serial.*;
 import cc.arduino.*; // NB this needs to be loaded manually on your computer (available at http://www.arduino.cc/playground/Interfacing/Processing)
 import guru.ttslib.*; // NB this also needs to be loaded (available from http://www.local-guru.net/projects/ttslib/ttslib-0.3.zip)
 
-TTS speeker;
+TTS tts;
 Arduino arduino;
 
 // this is setting up fill colours for Processing display
@@ -56,7 +56,7 @@ int movex=0;
 float f = random(260000);
 int currentM = millis(); // used to store sets current time since app launched in milliseconds
 int timer = 0; // a timer variable to compare it with to see if a fixed period is over
-int period =29000; // this is the interval between checks made for new tweets
+int period =10000; // this is the interval between checks made for new tweets
 int bk =int(f);
 int spacer=35;
 int rectHeight=0;
@@ -75,10 +75,10 @@ int[] values = {
 };
 
 void setup() {
-  testSendTweet();
+  //testSendTweet();
   // draw the Proessing display window
   size(470, 200);
-  speeker = new TTS();
+  tts = new TTS();
   // display communication ports (use this in test to establish fee ports)
   // initialise the tweetText variable with last tweet from specified username
 
@@ -139,12 +139,15 @@ void draw() {
 
   if (currentM-timer > period) { //this is checking tweet based upon a time interval"period"
     getTweet();
+    testSendTweet();
     timer=currentM;
     println ("Timer = "+currentM);
   } //@@ end  period @@
 }
 
-
+void mousePressed() {
+  tts.speak("Hi! I am a speaking Processing sketch");
+}
 void testSendTweet()
 {
   ConfigurationBuilder cbTEST = new ConfigurationBuilder();
@@ -172,12 +175,16 @@ void testSendTweet()
      println();
      println();
      println("tweetText= "+tweetText);
-     speeker.speak(tweetText);
+     //gogo();
+     //("Hi! I am a speaking Processing sketch");
+     //tts.speak("we");
+     //tweetText);
         println ("-----------");
         ll++; // @@ DEBUG STUFF (INCREMENT)
     
      //@@
      }
+     tts.speak(tweetText);
      
   
   }
@@ -236,7 +243,7 @@ void getTweet ()
     delay (delayVal);
     arduino.digitalWrite(newTweetPIN, Arduino.LOW);
     values[newTweetPIN] = Arduino.LOW;
-    //speeker.speak(tweetText);
+    //tts.speak(tweetText);
   };
 }
 
